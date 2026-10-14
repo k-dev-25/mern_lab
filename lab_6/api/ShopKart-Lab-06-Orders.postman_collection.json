@@ -1,0 +1,271 @@
+{
+  "info": {
+    "name": "ShopKart Lab 06 - Checkout and Orders",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Requires Lab 05 cart API and Razorpay Test Mode keys in the backend .env. Run register/login/product/cart setup before order requests."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "testEmail",
+      "value": "orders-judge@example.com"
+    },
+    {
+      "key": "testPassword",
+      "value": "shopkart123"
+    }
+  ],
+  "item": [
+    {
+      "name": "Setup - register user",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"fullName\":\"Orders Judge\",\"email\":\"{{testEmail}}\",\"password\":\"{{testPassword}}\",\"phone\":\"9876543210\"}"
+        },
+        "url": "{{baseUrl}}/customers/register"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('registered or already exists', () => pm.expect([201,409]).to.include(pm.response.code));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Setup - login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\":\"{{testEmail}}\",\"password\":\"{{testPassword}}\"}"
+        },
+        "url": "{{baseUrl}}/customers/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('login succeeded', () => pm.response.to.have.status(200));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Setup - create product",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Order Test Product {{$timestamp}}\",\"description\":\"Product for order API tests.\",\"price\":1499,\"category\":\"Home\",\"image\":\"https://example.com/order-product.jpg\",\"stock\":10}"
+        },
+        "url": "{{baseUrl}}/products"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('product created', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('productId', pm.response.json().product._id);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Setup - add product to cart",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/cart/{{productId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('cart item added', () => pm.response.to.have.status(200));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test 1 - create pending order (Test Mode keys required)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"shippingAddress\":{\"fullName\":\"Aarav Sharma\",\"phone\":\"9876543210\",\"addressLine1\":\"22 MG Road\",\"city\":\"Bengaluru\",\"state\":\"Karnataka\",\"pincode\":\"560001\"},\"totalAmount\":1}"
+        },
+        "url": "{{baseUrl}}/orders/create-payment-order"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('payment order created with server amount', () => { pm.response.to.have.status(201); const body = pm.response.json(); pm.expect(body.razorpayOrderId).to.be.a('string'); pm.expect(body.amount).to.be.above(0); pm.expect(body.currency).to.eql('INR'); pm.collectionVariables.set('shopKartOrderId', body.shopKartOrderId); pm.collectionVariables.set('razorpayOrderId', body.razorpayOrderId); });",
+              "pm.test('fake frontend total was ignored', () => pm.expect(pm.response.json().amount).to.eql(149900));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test 2 - cart remains before verification",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/cart"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('cart remains populated before payment verification', () => pm.expect(pm.response.json().cart.length).to.be.above(0));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test 3 - fake signature rejected",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"shopKartOrderId\":\"{{shopKartOrderId}}\",\"razorpay_order_id\":\"{{razorpayOrderId}}\",\"razorpay_payment_id\":\"pay_fake\",\"razorpay_signature\":\"fake\"}"
+        },
+        "url": "{{baseUrl}}/orders/verify-payment"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('fake signature rejected', () => pm.response.to.have.status(400));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test 4 - get my orders",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/orders"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('orders endpoint responds', () => pm.response.to.have.status(200));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test 5 - unauthenticated orders",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "token=invalid"
+          }
+        ],
+        "url": "{{baseUrl}}/orders"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('unauthorized', () => pm.response.to.have.status(401));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manual - verify successful Razorpay Test Mode payment",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"shopKartOrderId\":\"{{shopKartOrderId}}\",\"razorpay_order_id\":\"{{razorpayOrderId}}\",\"razorpay_payment_id\":\"pay_from_test_checkout\",\"razorpay_signature\":\"signature_returned_by_test_checkout\"}"
+        },
+        "url": "{{baseUrl}}/orders/verify-payment"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('verified payment confirms order and records payment id', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().order.paymentStatus).to.eql('PAID'); pm.expect(pm.response.json().order.status).to.eql('PLACED'); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}

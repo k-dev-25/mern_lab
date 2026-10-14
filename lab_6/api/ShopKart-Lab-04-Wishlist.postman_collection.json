@@ -1,0 +1,69 @@
+{
+  "info": {
+    "name": "ShopKart Lab 04 - Wishlist",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Run in order. Login stores the token cookie; product setup creates the product used by the wishlist requests."
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "testEmail", "value": "wishlist-judge@example.com" },
+    { "key": "testPassword", "value": "shopkart123" }
+  ],
+  "item": [
+    {
+      "name": "Setup - register judge user",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"fullName\":\"Wishlist Judge\",\"email\":\"{{testEmail}}\",\"password\":\"{{testPassword}}\",\"phone\":\"9876543210\"}" },
+        "url": "{{baseUrl}}/customers/register"
+      },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('registered or already exists', () => pm.expect([201,409]).to.include(pm.response.code));"], "type": "text/javascript" } }]
+    },
+    {
+      "name": "Setup - login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{testEmail}}\",\"password\":\"{{testPassword}}\"}" },
+        "url": "{{baseUrl}}/customers/login"
+      },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('login succeeded', () => pm.response.to.have.status(200));", "pm.test('token cookie set', () => pm.expect(pm.cookies.has('token')).to.eql(true));"], "type": "text/javascript" } }]
+    },
+    {
+      "name": "Setup - create product",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"name\":\"Wishlist Test Product {{$timestamp}}\",\"description\":\"Product for wishlist API checks.\",\"price\":2999,\"category\":\"Electronics\",\"image\":\"https://example.com/product.jpg\",\"stock\":10}" },
+        "url": "{{baseUrl}}/products"
+      },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('product created', () => pm.response.to.have.status(201));", "pm.collectionVariables.set('productId', pm.response.json().product._id);"], "type": "text/javascript" } }]
+    },
+    {
+      "name": "Test 1 - add",
+      "request": { "method": "POST", "url": "{{baseUrl}}/wishlist/{{productId}}" },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('product added', () => pm.response.to.have.status(201));", "pm.test('success response', () => pm.expect(pm.response.json().success).to.eql(true));"], "type": "text/javascript" } }]
+    },
+    {
+      "name": "Test 2 - duplicate",
+      "request": { "method": "POST", "url": "{{baseUrl}}/wishlist/{{productId}}" },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('duplicate rejected', () => pm.response.to.have.status(409));"], "type": "text/javascript" } }]
+    },
+    {
+      "name": "Test 3 - get current wishlist",
+      "request": { "method": "GET", "url": "{{baseUrl}}/wishlist" },
+      "event": [{ "listen": "test", "script": { "exec": ["const body = pm.response.json();", "pm.test('wishlist returned', () => pm.response.to.have.status(200));", "pm.test('product is populated', () => pm.expect(body.wishlist.some(product => product._id === pm.collectionVariables.get('productId'))).to.eql(true));", "pm.test('count matches', () => pm.expect(body.count).to.eql(body.wishlist.length));"], "type": "text/javascript" } }]
+    },
+    {
+      "name": "Test 4 - remove",
+      "request": { "method": "DELETE", "url": "{{baseUrl}}/wishlist/{{productId}}" },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('product removed', () => pm.response.to.have.status(200));"], "type": "text/javascript" } }]
+    },
+    {
+      "name": "Test 5 - unauthenticated",
+      "request": { "method": "GET", "header": [{ "key": "Cookie", "value": "token=invalid" }], "url": "{{baseUrl}}/wishlist" },
+      "event": [{ "listen": "test", "script": { "exec": ["pm.test('unauthorized', () => pm.response.to.have.status(401));"], "type": "text/javascript" } }]
+    }
+  ]
+}

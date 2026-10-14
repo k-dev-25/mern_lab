@@ -1,0 +1,14 @@
+services:
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_DATABASE: shopkart
+      MONGO_INITDB_ROOT_USERNAME: shopkart
+      MONGO_INITDB_ROOT_PASSWORD: shopkart_password
+    ports:
+      - "27018:27017"
+    volumes:
+      - shopkart-mongo-data:/data/db
+
+volumes:
+  shopkart-mongo-data:
